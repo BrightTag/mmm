@@ -16,7 +16,7 @@ class ReplicationSlave(object):
     '''Sets up replication based on info in the local 'mmm' collection.
 
     Each 'master' connection has its own document in mmm:
-    
+
     {  _id: some_uuid,
       checkpoint: ...,  // timestamp offset in the oplog
       replication: [ {
@@ -57,7 +57,7 @@ class ReplicationSlave(object):
         '''
         import bson
         return bson.Timestamp(*args, **kwargs)
-        
+
     def start(self, checkpoint=None):
         for gl in self._greenlets:
             gl.kill()
@@ -117,7 +117,7 @@ class ReplicationSlave(object):
             # Stop replication on the whole master
             self._coll.remove(dict(_id=master_id))
             self._config.pop(master_name, None)
-        
+
     def checkpoint(self, master_uri=None):
         if master_uri is None:
             masters = self._config.items()
@@ -143,7 +143,7 @@ class ReplicationSlave(object):
         triggers = Triggers(conn, checkpoint)
         for repl in master_repl_config['replication']:
             triggers.register(
-                repl['src'], repl['ops'], 
+                repl['src'], repl['ops'],
                 self._replicate_to_trigger(master_id, repl['dst']))
         for checkpoint in triggers.run():
             master_repl_config['checkpoint'] = checkpoint
@@ -159,7 +159,7 @@ class ReplicationSlave(object):
             src_id = uuid.UUID(src_id)
         db, cname = dst.split('.', 1)
         collection = self._conn[db][cname]
-        def trigger(ts, h, op, ns, o, o2=None, b=False):
+        def trigger(ts, h, op, ns, o, o2=None, b=False, v=None):
             log.info('%s <= %s: %s %s', self.id, src_id, op, ns)
             if op == 'i':
                 if o.get(MMM_REPL_FLAG) == self.id:
@@ -180,7 +180,7 @@ class ReplicationSlave(object):
                     log.debug('%s: skip', self.id)
                     return
                 setters.setdefault(MMM_REPL_FLAG, src_id)
-                    
+
                 log.debug('o %s, o2 %s', o, o2)
                 collection.update(o2, o, upsert)
             elif op == 'd':
@@ -201,4 +201,4 @@ class _ReplLHS(object):
         self.slave.set_replication(
             master_uri, ns_dst=self.ns_dst, ns_src=ns_src)
         return self
-        
+
