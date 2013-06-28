@@ -126,7 +126,7 @@ class ReplicationSlave(object):
                 (master_uri, self._config[master_uri]) ]
         for _id, master in masters:
             self._coll.update(
-                dict(_id=_id),
+                dict(_id=master["_id"]),
                 { '$set': { 'checkpoint': master['checkpoint'] } })
 
     def replicate(self, master_name, checkpoint=None):
