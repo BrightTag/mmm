@@ -1,6 +1,11 @@
-server_a:
-  id: '2c88ae84-7cb9-40f7-835d-c05e981f564d'
-  uri: 'mongodb://localhost:27019'
-server_b:
-  id: '0d9c284b-b47c-40b5-932c-547b8685edd0'
-  uri: 'mongodb://localhost:27017'
+master:
+  name: 'yourserver'
+  uri: 'localhost:27017'
+  id: 'your-server-identifier'
+replications:
+  - name: 'anotherserver'
+    id: 'another-server-identifier'
+    uri: 'localhost:27019'
+    source_namespace: 'mydb.mycol'
+    destination_namespace: 'otherdb.othercol'
+    operations: 'iud'

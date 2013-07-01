@@ -1,16 +1,22 @@
 #!/usr/bin/env python
+
 import gevent.monkey
 gevent.monkey.patch_all()
 
-import json
-import bson
 import argparse
 import logging.config
-
+import sys
 import yaml
 
-def main():
-    global log
+from mmm.replication import ReplicationEngine
+
+default_logging = {
+    "format": '%(asctime)s %(name)-12s %(levelname)-8s %(message)s',
+    "datefmt": '%Y-%m-%d %H:%M:%S',
+    "level": logging.DEBUG
+}
+
+if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument(
         '-l', '--logging', dest='logging', default=None,
@@ -19,104 +25,25 @@ def main():
         '-c', '--config', dest='config', default='test.yml',
         help='Topology config file',
         required=True)
-    subparsers = parser.add_subparsers(
-        title='subcommands',
-        description='valid subcommands')
-
-    dump_config = subparsers.add_parser(
-        'dump-config', description='Show the replication configuration')
-    dump_config.set_defaults(func=run_dump_config)
-
-    clear_config = subparsers.add_parser(
-        'clear-config', description='Reset the server(s) to not be replicating')
-    clear_config.add_argument(
-        '-s', '--slave', dest='slave', default=None,
-        help='Restrict operations to a particular named slave')
-    clear_config.set_defaults(func=run_clear_config)
-
-    replicate = subparsers.add_parser(
-        'replicate', description='Create a replication link')
-    replicate.add_argument('-s', '--src', dest='src', required=True)
-    replicate.add_argument('-d', '--dst', dest='dst', required=True)
-    replicate.add_argument('-o', '--ops', dest='ops', default='iud')
-    replicate.set_defaults(func=run_replicate)
-
-    run = subparsers.add_parser(
-        'run', description='Run the replication engine')
-    run.add_argument(
-        '-s', '--slave', dest='slave', default=None,
-        help='Restrict operations to a particular named slave')
-    run.set_defaults(func=run_main)
 
     args = parser.parse_args()
     if args.logging:
         logging.config.fileConfig(args.logging)
     else:
-        logging.basicConfig(
-            format='%(asctime)s %(name)-12s %(levelname)-8s %(message)s',
-            datefmt='%Y-%m-%d %H:%M:%S',
-            level=logging.INFO)
+        logging.basicConfig(**default_logging)
+
     log = logging.getLogger('mmm')
-        
-    from mmm.slave import ReplicationSlave
 
-    with open(args.config) as fp:
-        config = yaml.load(fp)
-    servers = {}
-    for name, sconfig in config.items():
-        slave = ReplicationSlave(config, name=name)
-        slave.load_config()
-        servers[name] = slave
-    
-    args.func(config, servers, args)
+    config = yaml.load(open(args.config))
+    master = config["master"]
+    engine = ReplicationEngine(master["id"], master["uri"], config["replications"])
 
-def run_dump_config(config, servers, args):
-    print '=== Server Config ==='
-    for id, server in servers.items():
-        print '%s (%s) => %s' % (
-            server.name, server.id, server.uri)
-    print
-    for name, server in servers.items():
-        config = server.dump_config()
-        print '=== %s Replication Config'  % server.name
-        for mname, mconfig in config.items():
-            for repl in mconfig['replication']:
-                print '     - %s <= %s/%s (%s)' % (
-                    repl['dst'], mname, repl['src'], repl['ops'])
-    print
+    engine.start()
 
-def run_clear_config(config, servers, args):
-    if args.slave:
-        servers = [ servers[args.slave] ]
-    else:
-        servers = servers.values()
-
-    yn = raw_input('About to clear config on servers: %s, are you sure? (yN) ' %
-                   [ server.name for server in servers ])
-    if yn.lower()[0] != 'y':
-        print 'Aborted.'
-        return
-    for server in servers:
-        print 'Clear config for %s' % server.name
-        server.clear_config()
-
-def run_replicate(config, servers, args):
-    s_src, ns_src = args.src.split('/', 1)
-    s_dst, ns_dst = args.dst.split('/', 1)
-    servers[s_dst].set_replication(
-        s_src, ns_src=ns_src, ns_dst=ns_dst, ops=args.ops)
-
-def run_main(config, servers, args):
-    log = logging.getLogger('mmm')
-    for s in servers.values():
-        s.start()
     while True:
-        gevent.sleep(5)
-        log.info('=== mark ===')
-
-
-    
-
-    
-if __name__ == '__main__':
-    main()
+        try:
+            gevent.sleep(5)
+            log.debug("Main thread sleeping")
+        except KeyboardInterrupt:
+            log.info("Exiting due to KeyboardInterrupt")
+            sys.exit(0)
