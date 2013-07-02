@@ -9,16 +9,17 @@ class TriggersTailTest(TestCase):
 
   def setUp(self):
     self.cursor = MagicMock()
-    self.oplog = MagicMock()
-    self.oplog.find.return_value = self.cursor
-    self.checkpoint_col = MagicMock()
+
+    self.trigger = Triggers("my-source-id", "my-uri")
+    self.trigger._oplog = MagicMock()
+    self.trigger._oplog.find.return_value = self.cursor
+    self.trigger._checkpoint = MagicMock()
+
     self.callback_func = MagicMock()
-    self.trigger = Triggers("my-source-id", self.oplog, self.checkpoint_col)
     self.default_checkpoint = 0L
 
   def _assert_calls(self, checkpoint):
-    self.oplog.ensure_index.assert_called_with('ts')
-    self.oplog.find.assert_called_with({"ts": {'$gt': checkpoint}}, tailable=True, await_data=True)
+    self.trigger._oplog.find.assert_called_with({"ts": {'$gt': checkpoint}}, tailable=True, await_data=True)
     self.cursor.sort.assert_called_with('$natural')
 
   def test_tail_with_no_messages(self):
@@ -89,51 +90,23 @@ class TriggersTailTest(TestCase):
     self.assertFalse(self.callback_func.called)
     self.assertEquals(op_timestamp, new_checkpoint)
 
-  def test_tail_with_wildcarding(self):
-    op_timestamp = bson.Timestamp(long(time.time()), 0)
-    #some oplog message I copied from Mongo
-    op_message = {
-      "ts" : op_timestamp,
-      "h" : -2429474310205918006,
-      "op" : "u",
-      "ns" : "foodb.barcol",
-      "o2" : {
-        "_id" : "51d2daa81fa97fc9611102cf"
-      },
-      "o" : {
-        "$set" : {
-          "bar" : "baz"
-        }
-      }
-    }
-    self.cursor.sort.return_value = [op_message]
-    self.trigger.register("foodb.*", "u", self.callback_func)
-
-    new_checkpoint = self.trigger._tail_oplog(self.default_checkpoint)
-
-    self._assert_calls(self.default_checkpoint)
-    self.callback_func.assert_called_with(**op_message)
-    self.assertEquals(op_timestamp, new_checkpoint)
-
 class TriggersSetCheckpointTest(TestCase):
 
   def setUp(self):
-    self.oplog = MagicMock()
-    self.checkpoint_col = MagicMock()
-    self.trigger = Triggers("my-source-id", self.oplog, self.checkpoint_col)
+    self.trigger = Triggers("my-source-id", "my-uri")
+    self.trigger._oplog = MagicMock()
+    self.trigger._checkpoint = MagicMock()
 
   def test_checkpoint_exists(self):
-    self.checkpoint_col.find_one.return_value = {"checkpoint": "some value"}
+    self.trigger._checkpoint.find_one.return_value = {"checkpoint": "some value"}
     checkpoint = self.trigger._set_and_get_checkpoint()
 
-    self.oplog.ensure_index.assert_called_with('ts')
-    self.checkpoint_col.find_one.assert_called_with({"_id": "my-source-id"})
+    self.trigger._checkpoint.find_one.assert_called_with({"_id": "my-source-id"})
     self.assertEquals("some value", checkpoint)
 
   def test_checkpoint_does_not_exist(self):
-    self.checkpoint_col.find_one.return_value = None
+    self.trigger._checkpoint.find_one.return_value = None
     checkpoint = self.trigger._set_and_get_checkpoint()
 
-    self.oplog.ensure_index.assert_called_with('ts')
-    self.checkpoint_col.find_one.assert_called_with({"_id": "my-source-id"})
+    self.trigger._checkpoint.find_one.assert_called_with({"_id": "my-source-id"})
     self.assertNotEquals("some value", checkpoint)

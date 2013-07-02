@@ -16,6 +16,25 @@ default_logging = {
     "level": logging.DEBUG
 }
 
+"""
+Config file should look like this:
+
+master:
+  name: 'my master'
+  uri: 'localhost:27017'
+  id: 'my-server-mongo'
+replications:
+  - name: 'another server'
+    id: 'my-other-server-mongo'
+    uri: 'localhost:27019'
+    operations: 'iud'
+    namespaces:
+      - source: 'mydb.mycol'
+        dest: 'otherdb.othercol'
+      - source: 'mydb.anothercol'
+        dest: 'otherdb.anothercol'
+"""
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument(

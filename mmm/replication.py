@@ -11,10 +11,11 @@ class ReplicationEngine(object):
   def __init__(self, source_id, source_uri, destinations, *connection_args, **connection_kwargs):
     self._connection = Connection(source_uri, *connection_args, **connection_kwargs)
     self._collection = self._connection.local.mmm
-    self.triggers = Triggers(source_id, self._connection)
+    self.triggers = Triggers(source_id, source_uri, *connection_args, **connection_kwargs)
     for dest in destinations:
-      replicator = Replicator(source_id, dest["id"], dest["uri"], *dest["destination_namespace"].split(".", 1))
-      self.triggers.register(dest["source_namespace"], dest.get("operations", "iud"), replicator)
+      for namespace in dest["namespaces"]:
+        replicator = Replicator(source_id, dest["id"], dest["uri"], *namespace["dest"].split(".", 1))
+        self.triggers.register(namespace["source"], dest.get("operations", "iud"), replicator)
 
   def start(self, checkpoint=None):
     gevent.spawn_link_exception(self.triggers.run)

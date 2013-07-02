@@ -2,42 +2,63 @@ import bson
 from collections import defaultdict
 import gevent
 import logging
+from pymongo import Connection
+from pymongo.errors import AutoReconnect, OperationFailure
+import sys
 import threading
 import time
 
 log = logging.getLogger(__name__)
+
+RECONNECT_SLEEP_TIME = 60
 
 class Triggers(object):
   """
   last_op_message_read_at: time in seconds, only op log messages that happened after this time
   will be read.
   """
-  def __init__(self, source_id, oplog, checkpoint_collection):
+  def __init__(self, source_id, source_uri, *connection_args, **connection_kwargs):
     self.source_id = source_id
-    self._oplog = oplog
-    self._checkpoint = checkpoint_collection
-    self._oplog.ensure_index('ts')
+    self.source_uri = source_uri
+    self.connection_args = connection_args
+    self.connection_kwargs = connection_kwargs
     self._callbacks = defaultdict(list)
     self.query_id = {"_id": self.source_id}
     self.stop_event = threading.Event()
+    self._oplog = None
+    self._checkpoint = None
 
   def stop(self):
     self.stop_event.set()
 
+  def connect(self):
+    connection = Connection(self.source_uri, *self.connection_args, **self.connection_kwargs)
+    self._oplog = connection.local.oplog.rs
+    self._oplog.ensure_index('ts')
+    self._checkpoint = connection.local.mmm
+
   def run(self):
+    self.connect()
     last_op_message_read_at = self._set_and_get_checkpoint()
     log.debug("Reading oplog messages after %s", last_op_message_read_at)
     while not self.stop_event.isSet():
-      last_op_message_read_at = self._tail_oplog(last_op_message_read_at)
+      try:
+        last_op_message_read_at = self._tail_oplog(last_op_message_read_at)
+      except (AutoReconnect, OperationFailure):
+        log.warn("Connection to master failed, sleeping for %s seconds before attempting to re-connect...", RECONNECT_SLEEP_TIME)
+        gevent.sleep(RECONNECT_SLEEP_TIME)
+        try:
+          self.connect()
+        except Exception:
+          log.error("Unable to reconnect to master at %s, exiting", self.source_uri, exc_info=1)
+          sys.exit(0)
 
   def _tail_oplog(self, checkpoint):
     spec = {"ts": {'$gt': checkpoint}}
     q = self._oplog.find(spec, tailable=True, await_data=True)
     for op_doc in q.sort('$natural'):
-      for (namespace, op), callbacks in self._callbacks.items():
-        if op == op_doc['op'] and namespace in [op_doc['ns'], op_doc['ns'].split(".", 1)[0] + ".*"]:
-          for callback in callbacks:
-            callback(**op_doc)
+      for callback in self._callbacks.get((op_doc['ns'], op_doc['op']), []):
+        callback(**op_doc)
       checkpoint = op_doc['ts']
       self._checkpoint.update(self.query_id, {'$set': {'checkpoint': checkpoint}})
     return checkpoint
