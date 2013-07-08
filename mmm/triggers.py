@@ -6,7 +6,6 @@ import logging
 from pymongo import Connection
 from pymongo.errors import AutoReconnect, OperationFailure
 import sys
-import threading
 import time
 
 log = logging.getLogger(__name__)
@@ -42,7 +41,7 @@ class Triggers(object):
     self.connection_kwargs = connection_kwargs
     self._callbacks = defaultdict(list)
     self.query_id = {"_id": self.source_id}
-    self.stop_event = threading.Event()
+    self.stop_event = gevent.event.Event()
     self._oplog = None
     self._checkpoint = None
 
