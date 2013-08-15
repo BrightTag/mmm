@@ -11,6 +11,7 @@ import time
 log = logging.getLogger(__name__)
 
 RECONNECT_SLEEP_TIME = 60
+IDLE_SLEEP_TIME = 1
 
 class Triggers(object):
   """
@@ -61,6 +62,8 @@ class Triggers(object):
         callback(**op_doc)
       checkpoint = op_doc['ts']
       self._checkpoint.update(self.query_id, {'$set': {'checkpoint': checkpoint}})
+    else:
+      gevent.sleep(IDLE_SLEEP_TIME)
     return checkpoint
 
   def _set_and_get_checkpoint(self):
