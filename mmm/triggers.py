@@ -1,5 +1,6 @@
 import bson
 from collections import defaultdict
+from functools import wraps
 import gevent
 import logging
 from pymongo import Connection
@@ -12,6 +13,22 @@ log = logging.getLogger(__name__)
 
 RECONNECT_SLEEP_TIME = 60
 IDLE_SLEEP_TIME = 1
+LOG_COUNT = 1000
+
+def log_counts(func):
+  @wraps(func)
+  def f(*args, **kwargs):
+    try:
+      value = func(*args, **kwargs)
+      f.calls += 1
+      if f.calls % LOG_COUNT == 0:
+        log.info("Replicated %s documents thus far", f.calls)
+      return value
+    except:
+      raise # not responsible for dealing with this exception
+
+  f.calls = 0
+  return f
 
 class Triggers(object):
   """
@@ -45,8 +62,9 @@ class Triggers(object):
     while not self.stop_event.isSet():
       try:
         last_op_message_read_at = self._tail_oplog(last_op_message_read_at)
+        log.debug("advancing checkpoint to %s", last_op_message_read_at)
       except (AutoReconnect, OperationFailure):
-        log.warn("Connection to master failed, sleeping for %s seconds before attempting to re-connect...", RECONNECT_SLEEP_TIME)
+        log.warn("Connection to master failed at %s, sleeping for %s seconds before attempting to re-connect...", (self.source_uri, RECONNECT_SLEEP_TIME))
         gevent.sleep(RECONNECT_SLEEP_TIME)
         try:
           self.connect()
@@ -58,13 +76,17 @@ class Triggers(object):
     spec = {"ts": {'$gt': checkpoint}}
     q = self._oplog.find(spec, tailable=True, await_data=True)
     for op_doc in q.sort('$natural'):
-      for callback in self._callbacks.get((op_doc['ns'], op_doc['op']), []):
-        callback(**op_doc)
+      self._exec_callbacks(op_doc)
       checkpoint = op_doc['ts']
       self._checkpoint.update(self.query_id, {'$set': {'checkpoint': checkpoint}})
     else:
       gevent.sleep(IDLE_SLEEP_TIME)
     return checkpoint
+
+  @log_counts
+  def _exec_callbacks(self, op_doc):
+    for callback in self._callbacks.get((op_doc['ns'], op_doc['op']), []):
+      callback(**op_doc)
 
   def _set_and_get_checkpoint(self):
     #is there a command in Mongo to do this in one shot: if the document doesn't exist just create it?

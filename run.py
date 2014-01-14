@@ -4,16 +4,40 @@ import gevent.monkey
 gevent.monkey.patch_all()
 
 import argparse
-import logging.config
+from logging import config
+import logging
 import sys
 import yaml
 
 from mmm.replication import ReplicationEngine
 
-default_logging = {
-    "format": '%(asctime)s %(name)-12s %(levelname)-8s %(message)s',
-    "datefmt": '%Y-%m-%d %H:%M:%S',
-    "level": logging.DEBUG
+def logging_config(level, filename):
+  return {
+  "version": 1,
+  "disable_existing_loggers": False,
+  "formatters": {
+    "standard": {
+      "format": "%(asctime)s %(name)-12s %(levelname)-8s %(message)s",
+      "datefmt": '%Y-%m-%d %H:%M:%S'
+    }
+  },
+  "handlers": {
+    "default": {
+      "level": level,
+      "class": "logging.handlers.RotatingFileHandler",
+      "formatter": "standard",
+      "filename": filename,
+      "maxBytes": 50 * 1024 * 1024, # 50 MB
+      "backupCount": 7
+    }
+  },
+  "loggers": {
+    "": {
+      "handlers": ["default"],
+      "level": level,
+      "propogate": True
+    }
+  }
 }
 
 """
@@ -37,19 +61,13 @@ replications:
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        '-l', '--logging', dest='logging', default=None,
-        help='Logging config file')
-    parser.add_argument(
-        '-c', '--config', dest='config', default='test.yml',
-        help='Topology config file',
-        required=True)
+    parser.add_argument("-l", "--level", choices=[x for x in logging._levelNames.keys() if isinstance(x, str)],
+        default="INFO", help="logging level string (e.g. DEBUG), defaults to INFO")
+    parser.add_argument("-f", "--filename", default="./mmm.log", help="filename to log to, defaults to ./mmm.log")
+    parser.add_argument('-c', '--config', default='test.yml', help='Topology config file', required=True)
 
     args = parser.parse_args()
-    if args.logging:
-        logging.config.fileConfig(args.logging)
-    else:
-        logging.basicConfig(**default_logging)
+    config.dictConfig(logging_config(args.level, args.filename))
 
     log = logging.getLogger('mmm')
 
