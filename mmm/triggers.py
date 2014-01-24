@@ -51,7 +51,6 @@ class Triggers(object):
   def connect(self):
     connection = Connection(self.source_uri, *self.connection_args, **self.connection_kwargs)
     self._oplog = connection.local.oplog.rs
-    self._oplog.ensure_index('ts')
     self._checkpoint = connection.local.mmm
 
   def run(self):
