@@ -12,7 +12,7 @@ document replicated with its source.
 To install, use pip:
 
     pip install MongoMultiMaster
-    
+
 ## MongoDB Setup
 
 MMM needs access to the replica set oplog for each master. This means it doesn't
@@ -131,3 +131,22 @@ There are probably sharp edges, other missed bugs, and various nasty things
 waiting for you if you use MMM in a production system without thorough
 testing. But if you like running with scissors and otherwise living dangerously,
 feel free to try it out.
+
+## Testing locally with Vagrant:
+
+```
+vagrant up
+```
+
+Will create six hosts, where the 2 character suffix groups a master/slave pair:
+mongo01r1, mongo02r1, mongo01r2, etc. The mongo01xx nodes will be configured as masters,
+and mongo02xx as slaves. You'll need to SSH into each master node and start up MMM:
+
+~~~~
+$ vagrant ssh mongo01r1
+~ $ cd mmm
+~/mmm $ ./start
+~~~~
+
+The default configuration replicates the "test.things" collection. If you insert/update some things,
+you should see that they are replicated to all other nodes

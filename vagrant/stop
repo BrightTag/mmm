@@ -1,0 +1,10 @@
+APP_HOME=/home/vagrant/mmm
+PID=$(pgrep -f "python.*run.py")
+
+if [[ -n "${PID}" ]]; then
+  kill ${PID} && echo "mmm stopped"
+else
+  echo "mmm is NOT running. Therefore it can't be stopped."
+fi
+
+exit 0

@@ -1,0 +1,12 @@
+APP_HOME=/home/vagrant/mmm
+PID=$([[ -f ${APP_HOME}/pidfile ]] && cat ${APP_HOME}/pidfile)
+
+if [[ -f "${PID}" ]]; then
+  echo "mmm is already running with pid: ${PID}"
+else
+  cd ${APP_HOME}
+  virtualenv env
+  source ${APP_HOME}/env/bin/activate
+  pip install -r requires.txt
+  ./run.py -c config.yaml -f /home/vagrant/mmm/mmm.log --level DEBUG &
+fi

@@ -59,8 +59,7 @@ class Triggers(object):
     log.debug("Reading oplog messages after %s", last_op_message_read_at)
     while not self.stop_event.isSet():
       try:
-        last_op_message_read_at = self._tail_oplog(last_op_message_read_at)
-        log.debug("advancing checkpoint to %s", last_op_message_read_at)
+        self._tail_oplog(last_op_message_read_at)
       except (AutoReconnect, OperationFailure):
         log.warn("Connection to master failed at %s, sleeping for %s seconds before attempting to re-connect...", (self.source_uri, RECONNECT_SLEEP_TIME))
         gevent.sleep(RECONNECT_SLEEP_TIME)
@@ -72,14 +71,19 @@ class Triggers(object):
 
   def _tail_oplog(self, checkpoint):
     spec = {"ts": {'$gt': checkpoint}}
-    q = self._oplog.find(spec, tailable=True, await_data=True)
-    for op_doc in q.sort('$natural'):
-      self._exec_callbacks(op_doc)
-      checkpoint = op_doc['ts']
-      self._checkpoint.update(self.query_id, {'$set': {'checkpoint': checkpoint}})
-    else:
-      gevent.sleep(IDLE_SLEEP_TIME)
-    return checkpoint
+    cursor = self._oplog.find(spec, tailable=True, await_data=True)
+    try:
+      while cursor.alive:
+        try:
+          op_doc = cursor.next()
+          self._exec_callbacks(op_doc)
+          checkpoint = op_doc['ts']
+          self._checkpoint.update(self.query_id, {'$set': {'checkpoint': checkpoint}})
+          log.debug("advancing checkpoint to %s", checkpoint)
+        except StopIteration:
+          gevent.sleep(IDLE_SLEEP_TIME)
+    finally:
+      cursor.close()
 
   @log_counts
   def _exec_callbacks(self, op_doc):

@@ -1,0 +1,19 @@
+master:
+  name: 'r2'
+  uri: 'mongodb://mongo01r2:27017,mongo02r2:27017/?replicaSet=brighttag-shard-1'
+  id: 'r2-mongo'
+replications:
+  - name: 'r1'
+    id: 'r1-mongo'
+    uri: 'mongodb://mongo01r1:27017,mongo02r1:27017/?replicaSet=brighttag-shard-1'
+    operations: 'iud'
+    namespaces:
+      - source: 'test.things'
+        dest: 'test.things'
+  - name: 'r3'
+    id: 'r3-mongo'
+    uri: 'mongodb://mongo01r3:27017,mongo02r3:27017/?replicaSet=brighttag-shard-1'
+    operations: 'iud'
+    namespaces:
+      - source: 'test.things'
+        dest: 'test.things'
